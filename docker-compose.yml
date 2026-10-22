@@ -1,10 +1,36 @@
+
 services:
   order-service:
     build: ./order-service
     ports:
       - "8000:8000"
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
   inventory-service:
     build: ./inventory-service
     ports:
       - "8001:8001"
+
+  notification-service:
+    build: ./notification-service
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
