@@ -1,148 +1,172 @@
-# MaltaShop — SOA and Microservices
 
-## 1. Project Overview
+# MaltaShop — Service-Oriented Architecture and Microservices
 
-MaltaShop is a prototype e-commerce system developed using Service-Oriented Architecture (SOA) and microservices principles. It separates order processing and inventory management into two independent services.
+## Project Overview
 
-## 2. Architecture
+MaltaShop is a working microservices prototype developed for a Service-Oriented Architecture assessment.
 
-The project contains two microservices:
+The project demonstrates independently containerised services, synchronous REST communication, asynchronous event messaging through RabbitMQ, and distributed tracing using correlation IDs.
 
-- **Order Service:** Accepts customer orders, generates order IDs, and coordinates inventory reservations.
-- **Inventory Service:** Maintains product information and stock quantities and supports inventory reservation requests.
-
-The Order Service communicates with the Inventory Service over HTTP.
-
-### Architecture Diagram
-
-```text
-Customer / API Client
-         |
-         v
-   Order Service
-    Port 8000
-         |
-         | HTTP request
-         v
-  Inventory Service
-    Port 8001
-         |
-         v
- Product Inventory
-```
-
-## 3. Technologies Used
+## Technologies
 
 - Python
 - FastAPI
-- Uvicorn
-- Docker
-- Docker Compose
+- Docker and Docker Compose
+- RabbitMQ
 - GitHub Actions
-- REST APIs
-- OpenAPI / Swagger UI
 
-## 4. Project Structure
+## Implemented Services
+
+### 1. Order Service
+
+Port: `8000`
+
+- Exposes a REST API for creating orders.
+- Validates order quantities.
+- Requests stock reservation from the Inventory Service.
+- Generates an order ID and correlation ID.
+- Publishes an `OrderPlaced` event to RabbitMQ after successful order creation.
+
+API documentation: http://localhost:8000/docs
+
+### 2. Inventory Service
+
+Port: `8001`
+
+- Provides inventory information.
+- Processes stock reservation requests from the Order Service.
+- Updates available stock following successful reservations.
+
+### 3. Notification Service
+
+- Connects to RabbitMQ.
+- Consumes `OrderPlaced` events from the `order_events` queue.
+- Logs consumed events with their order IDs and correlation IDs.
+- Demonstrates asynchronous event processing.
+
+This prototype logs notification events rather than sending real emails or push notifications.
+
+### 4. RabbitMQ
+
+Management interface: http://localhost:15672
+
+Default local credentials:
+
+- Username: `guest`
+- Password: `guest`
+
+RabbitMQ enables asynchronous communication between the Order and Notification services.
+
+## Architecture
 
 ```text
-maltashop-soa-microservices/
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-├── inventory-service/
-│   ├── app/
-│   ├── Dockerfile
-│   └── requirements.txt
-├── order-service/
-│   ├── app/
-│   │   ├── __init__.py
-│   │   └── main.py
-│   ├── Dockerfile
-│   └── requirements.txt
-├── docker-compose.yml
-└── README.md
+Client
+  |
+  | HTTP POST /orders
+  v
+Order Service
+  |
+  | Synchronous REST request
+  v
+Inventory Service
+  |
+  | Stock reservation response
+  v
+Order Service
+  |
+  | Publish OrderPlaced event
+  v
+RabbitMQ
+  |
+  | Consume event
+  v
+Notification Service
 ```
 
-## 5. Prerequisites
+## Running the Project
 
-Install the following before running the project:
+### Prerequisites
 
 - Docker Desktop
-- Git
-- A web browser
+- Docker Compose
 
-Ensure Docker Desktop is running before starting the services.
+### Start the services
 
-## 6. Running the Application
-
-Open a terminal in the project root directory.
-
-Build and start the services:
-
-```bash
-docker compose up --build
-```
-
-To run the services in the background:
+Open a terminal in the project root and run:
 
 ```bash
 docker compose up --build -d
 ```
 
-To stop the services:
+### Check container status
 
 ```bash
-docker compose down
+docker compose ps
 ```
 
-## 7. API Endpoints
+### Test order creation
 
-### Order Service — Port 8000
+1. Open http://localhost:8000/docs
+2. Expand `POST /orders`.
+3. Click **Try it out**.
+4. Enter:
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/` | Service home endpoint |
-| GET | `/health` | Health check |
-| POST | `/orders` | Create an order |
+```json
+{
+  "product_id": "product-001",
+  "quantity": 1
+}
+```
 
-Swagger API documentation:
+5. Click **Execute**.
 
-http://localhost:8000/docs
+A successful request returns HTTP `201 Created`, including an order ID, correlation ID, and event publication status.
 
-### Inventory Service — Port 8001
+### Verify asynchronous event consumption
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/health` | Health check |
-| GET | `/inventory` | View available inventory |
+Run:
 
-Inventory endpoint:
+```bash
+docker compose logs notification-service --tail 30
+```
 
-http://localhost:8001/inventory
+Look for a log entry containing `Consumed OrderPlaced`.
 
-## 8. Testing and Verification
+### Verify event publication
 
-The following checks have been performed during development:
+Run:
 
-- Docker Compose configuration validation.
-- Successful Docker image builds for both microservices.
-- Successful startup of both services.
-- Successful health-check responses from both services.
-- Inventory endpoint verification.
-- Order creation and inventory stock reduction verification.
+```bash
+docker compose logs order-service --tail 50
+```
 
-The order test demonstrated a reduction in T-shirt stock from 50 to 48.
+Look for a log entry containing `Published OrderPlaced`.
 
-## 9. Continuous Integration
+The correlation IDs in the publishing and consuming logs can be compared to trace the same event.
 
-The project includes a GitHub Actions workflow at `.github/workflows/ci.yml`.
+## Continuous Integration
 
-The workflow is configured to run on pushes and pull requests targeting the `main` branch. Its current steps include checking out the repository, validating the Docker Compose configuration, and building the microservices.
+The project includes a GitHub Actions workflow at:
 
-A successful local build does not, by itself, confirm that the GitHub Actions workflow has passed.
+`.github/workflows/ci.yml`
 
-## 10. Current Scope
+The workflow validates the Docker Compose configuration and builds the microservice images.
 
-This project demonstrates a basic microservices implementation with HTTP-based service communication, containerisation, API documentation, and a CI build workflow.
+A successful workflow run demonstrates automated build validation, not complete integration testing or production deployment.
 
-Additional architectural features, such as persistent databases, asynchronous messaging, and automated integration tests, should only be considered implemented when they are present in the source code and have been verified.
+## Prototype Limitations
+
+This is an educational proof of concept rather than a production-ready e-commerce system.
+
+The prototype does not implement:
+
+- Real payment processing
+- A complete compensating saga
+- Production-grade persistent databases
+- Actual email or push notification delivery
+- Comprehensive automated integration and performance tests
+- Production deployment
+
+## Repository
+
+https://github.com/jawad3g1-jpg/maltashop-soa-microservices
